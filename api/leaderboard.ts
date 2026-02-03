@@ -1,5 +1,3 @@
-import { kv } from './_lib/kv'
-
 const KEY = 'ball3d:lb:table1:v1'
 
 export default async function handler(req: any, res: any) {
@@ -10,9 +8,16 @@ export default async function handler(req: any, res: any) {
   const limitRaw = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit
   const limit = Math.max(1, Math.min(50, Number(limitRaw ?? 20) || 20))
 
-  if (!kv) {
-    return res.status(503).json({ error: 'Leaderboard not configured (missing UPSTASH env vars).' })
+  let kv: any = null
+  try {
+    const mod = await import('./_lib/kv')
+    kv = mod.kv
+  } catch (e) {
+    console.error('kv import failed', e)
+    return res.status(500).json({ error: 'Server init failed.' })
   }
+
+  if (!kv) return res.status(503).json({ error: 'Leaderboard not configured.' })
 
   try {
     const entries = await kv.zrange<Array<{ member: string; score: number }>>(KEY, 0, limit - 1, {

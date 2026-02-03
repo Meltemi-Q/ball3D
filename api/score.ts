@@ -1,5 +1,3 @@
-import { kv, ratelimit } from './_lib/kv'
-
 const KEY = 'ball3d:lb:table1:v1'
 
 function sanitizeName(name: unknown) {
@@ -13,10 +11,21 @@ export default async function handler(req: any, res: any) {
   res.setHeader('cache-control', 'no-store')
   if (req.method !== 'POST') return res.status(405).send('Method not allowed')
 
-  if (!kv) return res.status(503).send('Leaderboard not configured (missing UPSTASH env vars).')
+  let kv: any = null
+  let ratelimit: any = null
+  try {
+    const mod = await import('./_lib/kv')
+    kv = mod.kv
+    ratelimit = mod.ratelimit
+  } catch (e) {
+    console.error('kv import failed', e)
+    return res.status(500).send('Server init failed.')
+  }
+
+  if (!kv) return res.status(503).send('Leaderboard not configured.')
 
   if (ratelimit) {
-    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown')
+    const ip = (req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
       .toString()
       .split(',')[0]
       .trim()
