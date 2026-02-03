@@ -32,7 +32,7 @@ export class UIController {
       <div class="ui-layer" style="display:grid; grid-template-rows:auto 1fr auto; padding:14px; gap:12px;">
         <div id="hud" class="panel" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px;">
           <div style="display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;">
-            <div style="font-weight:700; letter-spacing:0.2px;">Ball3D</div>
+            <div style="font-weight:800; letter-spacing:0.6px;">CADET OPS</div>
             <div style="opacity:.7; font-size:13px;">A/D 或 ←/→ 翻板，<span class="kbd">Space</span> 蓄力发射</div>
           </div>
           <div style="display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; justify-content:flex-end;">
@@ -54,8 +54,8 @@ export class UIController {
         <div id="menu" class="panel" style="width:min(560px, 92vw); padding:16px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
             <div>
-              <div style="font-size:18px; font-weight:800;">Ball3D Pinball</div>
-              <div style="opacity:.75; font-size:13px; margin-top:4px;">刷分模式（1 张桌台） · 霓虹/暗黑主题可切换 · 匿名排行榜</div>
+              <div style="font-size:18px; font-weight:900; letter-spacing:0.6px;">Cadet Ops Pinball</div>
+              <div style="opacity:.75; font-size:13px; margin-top:4px;">军工科幻风致敬版 · 刷分模式（1 张桌台） · 主题可切换 · 匿名排行榜</div>
             </div>
             <button class="btn" id="btnClose">Close</button>
           </div>

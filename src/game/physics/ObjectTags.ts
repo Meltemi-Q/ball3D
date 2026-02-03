@@ -4,6 +4,10 @@ export type ObjectTag =
   | 'wall'
   | 'bumper'
   | 'target'
+  | 'dropTarget'
+  | 'spinner'
+  | 'sling'
+  | 'kickout'
   | 'drain'
   | 'lane'
   | 'flipper'
@@ -13,4 +17,3 @@ export type ColliderMeta = {
   id?: string
   score?: number
 }
-
