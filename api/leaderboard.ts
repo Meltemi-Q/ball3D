@@ -14,8 +14,7 @@ export default async function handler(req: any, res: any) {
     kv = mod.kv
   } catch (e) {
     console.error('kv import failed', e)
-    const msg = e instanceof Error ? e.message : String(e)
-    return res.status(500).json({ error: 'Server init failed.', detail: msg.slice(0, 180) })
+    return res.status(500).json({ error: 'Server init failed.' })
   }
 
   if (!kv) return res.status(503).json({ error: 'Leaderboard not configured.' })
