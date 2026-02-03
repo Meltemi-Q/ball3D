@@ -10,7 +10,7 @@ export default async function handler(req: any, res: any) {
 
   let kv: any = null
   try {
-    const mod = await import('./_lib/kv')
+    const mod = await import('./_lib/kv.js')
     kv = mod.kv
   } catch (e) {
     console.error('kv import failed', e)

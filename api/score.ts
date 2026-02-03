@@ -14,7 +14,7 @@ export default async function handler(req: any, res: any) {
   let kv: any = null
   let ratelimit: any = null
   try {
-    const mod = await import('./_lib/kv')
+    const mod = await import('./_lib/kv.js')
     kv = mod.kv
     ratelimit = mod.ratelimit
   } catch (e) {
