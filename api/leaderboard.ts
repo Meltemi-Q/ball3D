@@ -14,19 +14,20 @@ export default async function handler(req: any, res: any) {
     kv = mod.kv
   } catch (e) {
     console.error('kv import failed', e)
-    return res.status(500).json({ error: 'Server init failed.' })
+    const msg = e instanceof Error ? e.message : String(e)
+    return res.status(500).json({ error: 'Server init failed.', detail: msg.slice(0, 180) })
   }
 
   if (!kv) return res.status(503).json({ error: 'Leaderboard not configured.' })
 
   try {
-    const entries = await kv.zrange<Array<{ member: string; score: number }>>(KEY, 0, limit - 1, {
+    const entries = await kv.zrange(KEY, 0, limit - 1, {
       rev: true,
       withScores: true,
     })
-    const items = entries.map((e) => ({
-      name: String(e.member),
-      score: Math.floor(Number(e.score) || 0),
+    const items = (Array.isArray(entries) ? entries : []).map((e: any) => ({
+      name: String(e?.member ?? ''),
+      score: Math.floor(Number(e?.score) || 0),
     }))
     return res.status(200).json({ items })
   } catch (e) {
