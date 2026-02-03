@@ -30,9 +30,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const score = Math.floor(Number(body?.score ?? 0))
   if (!Number.isFinite(score) || score <= 0 || score > 2_000_000_000) return res.status(400).send('Invalid score.')
 
-  await kv.zadd(KEY, { score, member: name })
-  await kv.expire(KEY, 60 * 60 * 24 * 365)
-  return res.status(200).json({ ok: true })
+  try {
+    await kv.zadd(KEY, { score, member: name })
+    await kv.expire(KEY, 60 * 60 * 24 * 365)
+    return res.status(200).json({ ok: true })
+  } catch (e) {
+    console.error('score submit failed', e)
+    return res.status(502).send('Upstash request failed.')
+  }
 }
 
 function safeJson(s: string) {
@@ -42,4 +47,3 @@ function safeJson(s: string) {
     return null
   }
 }
-
