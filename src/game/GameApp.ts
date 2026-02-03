@@ -44,6 +44,7 @@ export class GameApp {
 
   private score = 0
   private multiplier = 1
+  private combo = 0
   private balls = 3
   private inLane = true
   private bonus = 0
@@ -84,7 +85,8 @@ export class GameApp {
       this.rapierReady = true
     }
 
-    this.world = new RAPIER.World({ x: 0, y: -9.81, z: 2.85 })
+    // 2.5D pinball: gravity only along Z (table tilt). Y is locked for moving bodies.
+    this.world = new RAPIER.World({ x: 0, y: 0, z: 10.5 })
     this.eventQueue = new RAPIER.EventQueue(true)
 
     this.table = buildCadetTable(this.world, this.renderer.scene, this.colliderMeta)
@@ -112,6 +114,7 @@ export class GameApp {
   startRun() {
     this.score = 0
     this.multiplier = 1
+    this.combo = 0
     this.balls = 3
     this.bonus = 0
     this.resetTargets()
@@ -178,6 +181,9 @@ export class GameApp {
         .setLinearDamping(0.12)
         .setAngularDamping(0.25),
     )
+    // Prevent hops/rail-jumps: keep simulation effectively on the XZ plane.
+    this.ballBody.setEnabledTranslations(true, false, true, true)
+    this.ballBody.setEnabledRotations(false, true, false, true)
     this.ballCollider = this.world.createCollider(
       RAPIER.ColliderDesc.ball(r)
         .setRestitution(0.32)
@@ -228,7 +234,7 @@ export class GameApp {
 
     if (this.inLane && p.z < this.table.laneExitZ) this.inLane = false
 
-    if (p.y < -3 || p.z > this.table.drainZ + 1.2) {
+    if (p.y < -3 || p.z > this.table.drainZ + 0.15) {
       this.onDrain()
       return
     }
@@ -343,6 +349,7 @@ export class GameApp {
           void this.audio.click(840)
           if (this.table.targets.every((x) => x.lit)) {
             this.multiplier = Math.min(8, this.multiplier + 1)
+            this.combo = 0
             this.addScore(1500, 0.25)
             this.sparks.burst(
               new THREE.Vector3(0, 0.6, -5.1),
@@ -369,6 +376,7 @@ export class GameApp {
         if (this.table.dropTargets.every((x) => x.down)) {
           this.addScore(2500, 0.35)
           this.multiplier = Math.min(8, this.multiplier + 1)
+          this.combo = 0
           this.dropResetAt = performance.now() + 1800
           void this.audio.boom(190, 0.14)
         }
@@ -401,18 +409,21 @@ export class GameApp {
         if (now - last < 350) return
         this.laneLastHit.set(meta.id, now)
 
+        if (meta.id.includes('outlane')) {
+          // Missing the flipper: this is effectively a drain.
+          this.addScore(meta.score ?? 120, 0)
+          this.onDrain()
+          return
+        }
+
         this.addScore(meta.score ?? 120, 0.04)
         this.bonus += 1
 
         const pBall = this.ballBody.translation()
         const pos = new THREE.Vector3(pBall.x, pBall.y + 0.12, pBall.z)
-        const col = meta.id.includes('outlane') ? new THREE.Color(0x9aa7ff) : new THREE.Color(0x7df9ff)
+        const col = new THREE.Color(0x7df9ff)
         this.sparks.burst(pos, col, 0.45)
-        void this.audio.click(meta.id.includes('outlane') ? 520 : 760)
-
-        // Gentle steer from outlanes toward center.
-        if (meta.id === 'outlane:left') this.ballBody.applyImpulse({ x: 0.55, y: 0, z: -0.2 }, true)
-        if (meta.id === 'outlane:right') this.ballBody.applyImpulse({ x: -0.55, y: 0, z: -0.2 }, true)
+        void this.audio.click(760)
         return
       }
     })
@@ -420,7 +431,11 @@ export class GameApp {
 
   private addScore(base: number, multiplierBoost: number) {
     this.score += Math.floor(base * this.multiplier)
-    this.multiplier = Math.min(8, this.multiplier + multiplierBoost)
+    this.combo += multiplierBoost
+    while (this.combo >= 1) {
+      this.combo -= 1
+      this.multiplier = Math.min(8, this.multiplier + 1)
+    }
   }
 
   private resetTargets() {
@@ -446,7 +461,8 @@ export class GameApp {
       this.bonus = 0
     }
     this.balls -= 1
-    this.multiplier = Math.max(1, Math.floor(this.multiplier))
+    this.multiplier = 1
+    this.combo = 0
     void this.audio.boom(120, 0.16)
     if (this.balls > 0) {
       this.spawnBall(true)

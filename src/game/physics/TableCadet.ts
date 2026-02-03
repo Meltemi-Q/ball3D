@@ -71,9 +71,9 @@ export function buildCadetTable(
   const floorSize = { w: 6.4, l: 12.2 }
 
   // Shooter lane is on the right side (positive X).
-  const ballSpawn = new THREE.Vector3(2.55, 0.28, 5.45)
+  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.35)
   const laneExitZ = 2.25
-  const drainZ = 6.0
+  const drainZ = 5.85
 
   const table = new THREE.Group()
   scene.add(table)
@@ -105,7 +105,7 @@ export function buildCadetTable(
   )
   colliderMeta.set(floorCol.handle, { tag: 'floor' })
 
-  const wallH = 0.65
+  const wallH = 0.85
   const railT = 0.18
   const railsBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
 
@@ -135,22 +135,21 @@ export function buildCadetTable(
   addWall(railT / 2, wallH / 2, floorSize.l / 2, new THREE.Vector3(floorSize.w / 2 + railT / 2 - 0.05, wallH / 2, 0))
   addWall(floorSize.w / 2, wallH / 2, railT / 2, new THREE.Vector3(0, wallH / 2, -floorSize.l / 2 + railT / 2))
 
-  // Apron / drain shaping.
-  addWall(2.25, wallH / 2, railT / 2, new THREE.Vector3(0, wallH / 2, 5.65))
-  addWall(1.95, wallH / 2, railT / 2, new THREE.Vector3(-2.15, wallH / 2, 5.08))
-  addWall(0.18, wallH / 2, railT / 2, new THREE.Vector3(1.55, wallH / 2, 5.08))
+  // Apron: keep the center open so missing the flippers drains the ball.
+  addWall(1.95, wallH / 2, railT / 2, new THREE.Vector3(-2.15, wallH / 2, 5.28), 0.08)
+  addWall(0.18, wallH / 2, railT / 2, new THREE.Vector3(1.55, wallH / 2, 5.22), -0.06)
 
   // Shooter lane divider (inner wall).
   addWall(railT / 2, wallH / 2, 2.25, new THREE.Vector3(1.82, wallH / 2, 3.75))
   // Shooter backstop.
-  addWall(0.9, wallH / 2, railT / 2, new THREE.Vector3(2.55, wallH / 2, 5.78))
+  addWall(0.9, wallH / 2, railT / 2, new THREE.Vector3(2.55, wallH / 2, 5.82))
 
   // Slingshots (treated as bumpers).
   const slingSize = { x: 1.22, y: 0.18, z: 0.32 }
   const slingGeo = new THREE.BoxGeometry(slingSize.x, slingSize.y, slingSize.z)
   const slingDefs = [
-    { id: 'sling:left', pos: new THREE.Vector3(-2.05, 0.14, 3.18), yaw: Math.PI * 0.16, color: 0x7df9ff },
-    { id: 'sling:right', pos: new THREE.Vector3(1.05, 0.14, 3.18), yaw: -Math.PI * 0.16, color: 0xb44cff },
+    { id: 'sling:left', pos: new THREE.Vector3(-2.08, 0.14, 4.18), yaw: Math.PI * 0.14, color: 0x7df9ff },
+    { id: 'sling:right', pos: new THREE.Vector3(0.98, 0.14, 4.18), yaw: -Math.PI * 0.14, color: 0xb44cff },
   ]
   for (const s of slingDefs) {
     const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(s.pos.x, s.pos.y, s.pos.z))
@@ -266,6 +265,8 @@ export function buildCadetTable(
         .setAngularDamping(2.2)
         .setLinearDamping(0.95),
     )
+    body.setEnabledTranslations(true, false, true, true)
+    body.setEnabledRotations(false, true, false, true)
     const col = world.createCollider(
       RAPIER.ColliderDesc.cuboid(0.6, 0.1, 0.03)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
@@ -329,10 +330,10 @@ export function buildCadetTable(
   {
     const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     const laneDefs = [
-      { id: 'inlane:left', pos: new THREE.Vector3(-1.55, 0.12, 4.75), hx: 0.28, hz: 0.45, score: 220, color: 0x7df9ff },
-      { id: 'inlane:right', pos: new THREE.Vector3(0.95, 0.12, 4.75), hx: 0.28, hz: 0.45, score: 220, color: 0xb44cff },
-      { id: 'outlane:left', pos: new THREE.Vector3(-2.82, 0.12, 4.95), hx: 0.24, hz: 0.6, score: 120, color: 0x9aa7ff },
-      { id: 'outlane:right', pos: new THREE.Vector3(2.78, 0.12, 4.95), hx: 0.18, hz: 0.6, score: 120, color: 0x9aa7ff },
+      { id: 'inlane:left', pos: new THREE.Vector3(-1.6, 0.12, 5.25), hx: 0.3, hz: 0.42, score: 220, color: 0x7df9ff },
+      { id: 'inlane:right', pos: new THREE.Vector3(1.02, 0.12, 5.25), hx: 0.3, hz: 0.42, score: 220, color: 0xb44cff },
+      { id: 'outlane:left', pos: new THREE.Vector3(-2.9, 0.12, 5.35), hx: 0.22, hz: 0.62, score: 120, color: 0x9aa7ff },
+      { id: 'outlane:right', pos: new THREE.Vector3(2.86, 0.12, 5.35), hx: 0.2, hz: 0.62, score: 120, color: 0x9aa7ff },
       { id: 'shooter:gate', pos: new THREE.Vector3(2.55, 0.12, 2.05), hx: 0.22, hz: 0.22, score: 80, color: 0x7df9ff },
     ] as const
 
@@ -355,8 +356,8 @@ export function buildCadetTable(
   // Flippers (dynamic, motorized revolute joints).
   const flipperGeo = new THREE.BoxGeometry(1.25, 0.18, 0.34)
   const hingeOffset = 0.55
-  const leftPos = new THREE.Vector3(-1.15, 0.14, 4.1)
-  const rightPos = new THREE.Vector3(0.95, 0.14, 4.1)
+  const leftPos = new THREE.Vector3(-1.25, 0.14, 5.05)
+  const rightPos = new THREE.Vector3(1.05, 0.14, 5.05)
 
   function createFlipper(
     side: 'left' | 'right',
@@ -380,6 +381,8 @@ export function buildCadetTable(
         .setLinearDamping(0.85)
         .setAngularDamping(3.2),
     )
+    body.setEnabledTranslations(true, false, true, true)
+    body.setEnabledRotations(false, true, false, true)
     const col = world.createCollider(
       RAPIER.ColliderDesc.cuboid(0.62, 0.09, 0.17)
         .setRestitution(0.25)

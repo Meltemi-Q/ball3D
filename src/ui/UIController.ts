@@ -33,7 +33,7 @@ export class UIController {
         <div id="hud" class="panel" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px;">
           <div style="display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;">
             <div style="font-weight:800; letter-spacing:0.6px;">CADET OPS</div>
-            <div style="opacity:.7; font-size:13px;">A/D 或 ←/→ 翻板，<span class="kbd">Space</span> 蓄力发射</div>
+            <div style="opacity:.7; font-size:13px;">A/D 或 ←/→ 翻板，<span class="kbd">Space</span> 发射（按住蓄力）</div>
           </div>
           <div style="display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; justify-content:flex-end;">
             <div>Score <span id="score" style="font-variant-numeric: tabular-nums; font-weight:800;">0</span></div>
