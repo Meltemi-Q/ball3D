@@ -36,9 +36,9 @@ export class Renderer3D {
     this.scene = new THREE.Scene()
     this.scene.fog = new THREE.FogExp2(0x05060b, 0.035)
 
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 200)
-    this.camera.position.set(0, 9.5, 12.5)
-    this.camera.lookAt(0, 0.3, -1.6)
+    this.camera = new THREE.PerspectiveCamera(52, 1, 0.05, 200)
+    this.camera.position.set(0, 6.8, 9.8)
+    this.camera.lookAt(0, 0.25, 0.2)
 
     const renderPass = new RenderPass(this.scene, this.camera)
     this.bloom = new BloomEffect({

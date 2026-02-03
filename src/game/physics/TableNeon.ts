@@ -47,6 +47,14 @@ const targetOffMat = new THREE.MeshStandardMaterial({
   emissiveIntensity: 0.25,
 })
 
+const slingMat = new THREE.MeshStandardMaterial({
+  color: 0x0b0d1f,
+  roughness: 0.22,
+  metalness: 0.85,
+  emissive: new THREE.Color(0x7df9ff),
+  emissiveIntensity: 0.55,
+})
+
 export function setTargetLit(mesh: THREE.Mesh, lit: boolean) {
   const mat = mesh.material as THREE.MeshStandardMaterial
   if (!lit) {
@@ -69,7 +77,7 @@ export function buildNeonTable(
   const bumpers: Array<{ body: RAPIER.RigidBody; color: THREE.Color }> = []
   const targets: Array<{ colliderHandle: number; mesh: THREE.Mesh; lit: boolean }> = []
 
-  const ballSpawn = new THREE.Vector3(2.35, 0.28, 4.9)
+  const ballSpawn = new THREE.Vector3(2.35, 0.28, 5.02)
   const laneExitZ = 2.2
   const drainZ = 5.25
 
@@ -136,7 +144,7 @@ export function buildNeonTable(
   )
   colliderMeta.set(backCol.handle, { tag: 'wall' })
 
-  const laneRailZ0 = 5.2
+  const laneRailZ0 = 5.35
   const laneRailZ1 = 1.6
   const laneRailL = Math.abs(laneRailZ0 - laneRailZ1)
   const laneRailGeo = new THREE.BoxGeometry(railT, wallHeight, laneRailL)
@@ -186,6 +194,36 @@ export function buildNeonTable(
     table.add(light)
   }
 
+  // Slingshots (classic-ish kickers above the flippers).
+  const slingSize = { x: 1.2, y: 0.18, z: 0.32 }
+  const slingGeo = new THREE.BoxGeometry(slingSize.x, slingSize.y, slingSize.z)
+  const slingDefs = [
+    { id: 'sling:left', pos: new THREE.Vector3(-1.95, 0.14, 3.15), yaw: Math.PI * 0.14, color: 0x7df9ff },
+    { id: 'sling:right', pos: new THREE.Vector3(1.15, 0.14, 3.15), yaw: -Math.PI * 0.14, color: 0xb44cff },
+  ]
+  for (const s of slingDefs) {
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(s.pos.x, s.pos.y, s.pos.z))
+    const qy = Math.sin(s.yaw / 2)
+    const qw = Math.cos(s.yaw / 2)
+    const col = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(slingSize.x / 2, slingSize.y / 2, slingSize.z / 2)
+        .setRotation({ x: 0, y: qy, z: 0, w: qw })
+        .setRestitution(1.15)
+        .setFriction(0.08)
+        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+      body,
+    )
+    colliderMeta.set(col.handle, { tag: 'bumper', id: s.id, score: 180 })
+
+    const mat = slingMat.clone()
+    ;(mat as THREE.MeshStandardMaterial).emissive = new THREE.Color(s.color)
+    const mesh = new THREE.Mesh(slingGeo, mat)
+    mesh.position.copy(s.pos)
+    mesh.rotation.y = s.yaw
+    table.add(mesh)
+    staticMeshes.push(mesh)
+  }
+
   const targetGeo = new THREE.BoxGeometry(0.44, 0.18, 0.14)
   const targetCount = 5
   for (let i = 0; i < targetCount; i++) {
@@ -220,32 +258,51 @@ export function buildNeonTable(
   )
   colliderMeta.set(drainCol.handle, { tag: 'drain', id: 'drain' })
 
-  const apronGeo = new THREE.BoxGeometry(2.0, wallHeight, railT)
+  const apronGeo = new THREE.BoxGeometry(1.8, wallHeight, railT)
   const apronL = new THREE.Mesh(apronGeo, railMat)
-  const apronR = new THREE.Mesh(apronGeo, railMat)
   const apronZ = 5.05
   apronL.position.set(-2.2, wallHeight / 2, apronZ)
-  apronR.position.set(2.2, wallHeight / 2, apronZ)
-  table.add(apronL, apronR)
-  staticMeshes.push(apronL, apronR)
+  table.add(apronL)
+  staticMeshes.push(apronL)
 
   const apronBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
   const apronLC = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(1.0, wallHeight / 2, railT / 2)
+    RAPIER.ColliderDesc.cuboid(0.9, wallHeight / 2, railT / 2)
       .setTranslation(apronL.position.x, apronL.position.y, apronL.position.z)
       .setFriction(0.35)
       .setRestitution(0.2),
     apronBody,
   )
   colliderMeta.set(apronLC.handle, { tag: 'wall' })
-  const apronRC = world.createCollider(
-    RAPIER.ColliderDesc.cuboid(1.0, wallHeight / 2, railT / 2)
-      .setTranslation(apronR.position.x, apronR.position.y, apronR.position.z)
+
+  const rightApronGeo = new THREE.BoxGeometry(0.26, wallHeight, railT)
+  const rightApron = new THREE.Mesh(rightApronGeo, railMat)
+  rightApron.position.set(1.42, wallHeight / 2, apronZ)
+  table.add(rightApron)
+  staticMeshes.push(rightApron)
+  const rightApronCol = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(0.13, wallHeight / 2, railT / 2)
+      .setTranslation(rightApron.position.x, rightApron.position.y, rightApron.position.z)
       .setFriction(0.35)
       .setRestitution(0.2),
     apronBody,
   )
-  colliderMeta.set(apronRC.handle, { tag: 'wall' })
+  colliderMeta.set(rightApronCol.handle, { tag: 'wall' })
+
+  const shooterBackGeo = new THREE.BoxGeometry(1.55, wallHeight, railT)
+  const shooterBack = new THREE.Mesh(shooterBackGeo, railMat)
+  shooterBack.position.set((1.55 + floorSize.w / 2) / 2, wallHeight / 2, 5.32)
+  table.add(shooterBack)
+  staticMeshes.push(shooterBack)
+  const shooterBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
+  const shooterBackCol = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(0.775, wallHeight / 2, railT / 2)
+      .setTranslation(shooterBack.position.x, shooterBack.position.y, shooterBack.position.z)
+      .setFriction(0.35)
+      .setRestitution(0.12),
+    shooterBody,
+  )
+  colliderMeta.set(shooterBackCol.handle, { tag: 'wall' })
 
   const flipperGeo = new THREE.BoxGeometry(1.25, 0.18, 0.34)
   const hingeOffset = 0.55

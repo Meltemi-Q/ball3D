@@ -192,9 +192,10 @@ export class GameApp {
 
     const release = this.input.consumeLaunchRelease()
     if (this.inLane && release.released) {
-      const power = 6.5 + 16.5 * Math.pow(Math.max(0, Math.min(1, release.charge)), 1.2)
+      const t = Math.max(0, Math.min(1, release.charge))
+      const power = 3.25 + 18.5 * (t * t)
       this.ballBody.applyImpulse({ x: 0, y: 0, z: -power }, true)
-      void this.audio.click(640 + 240 * release.charge)
+      void this.audio.click(640 + 260 * t)
     }
 
     this.accumulator += dt

@@ -15,8 +15,8 @@ export class InputManager {
 
   private launchStartMs: number | null = null
   private readonly maxChargeMs = 1200
-  private launchWasDown = false
   private launchReleasedPulse = false
+  private releasedCharge = 0
 
   attach() {
     window.addEventListener('keydown', this.onKeyDown)
@@ -36,8 +36,9 @@ export class InputManager {
 
   consumeLaunchRelease(): { released: boolean; charge: number } {
     const released = this.launchReleasedPulse
-    const charge = this.state.launchCharge
+    const charge = this.releasedCharge
     this.launchReleasedPulse = false
+    this.releasedCharge = 0
     return { released, charge }
   }
 
@@ -53,20 +54,22 @@ export class InputManager {
     if (down) {
       if (!this.state.launchPressed) this.launchStartMs = performance.now()
       this.state.launchPressed = true
+      this.launchReleasedPulse = false
       return
     }
+    if (this.state.launchPressed) {
+      const now = performance.now()
+      const start = this.launchStartMs ?? now
+      const elapsed = Math.max(0, now - start)
+      this.releasedCharge = Math.max(0, Math.min(1, elapsed / this.maxChargeMs))
+      this.launchReleasedPulse = true
+    }
     this.state.launchPressed = false
+    this.state.launchCharge = 0
     this.launchStartMs = null
   }
 
   tick() {
-    this.launchReleasedPulse = false
-
-    if (this.launchWasDown && !this.state.launchPressed) {
-      this.launchReleasedPulse = true
-    }
-    this.launchWasDown = this.state.launchPressed
-
     if (!this.state.launchPressed || this.launchStartMs === null) {
       this.state.launchCharge = 0
       return
@@ -95,4 +98,3 @@ export class InputManager {
     if (e.code === 'Space') this.setLaunch(false)
   }
 }
-
