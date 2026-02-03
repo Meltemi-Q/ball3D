@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(503).json({ error: 'Leaderboard not configured (missing UPSTASH env vars).' })
   }
 
-  const entries = await kv.zrange<{ member: string; score: number }>(KEY, 0, limit - 1, {
+  const entries = await kv.zrange<Array<{ member: string; score: number }>>(KEY, 0, limit - 1, {
     rev: true,
     withScores: true,
   })
@@ -25,4 +25,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }))
   return res.status(200).json({ items })
 }
-
