@@ -25,10 +25,15 @@ export default async function handler(req: any, res: any) {
       rev: true,
       withScores: true,
     })
-    const items = (Array.isArray(entries) ? entries : []).map((e: any) => ({
-      name: String(e?.member ?? ''),
-      score: Math.floor(Number(e?.score) || 0),
-    }))
+    const items: Array<{ name: string; score: number }> = []
+    if (Array.isArray(entries)) {
+      for (let i = 0; i < entries.length; i += 2) {
+        const name = String(entries[i] ?? '').trim()
+        const score = Math.floor(Number(entries[i + 1] ?? 0))
+        if (!Number.isFinite(score) || score <= 0) continue
+        items.push({ name: name || 'Anonymous', score })
+      }
+    }
     return res.status(200).json({ items })
   } catch (e) {
     console.error('leaderboard failed', e)
