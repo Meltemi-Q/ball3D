@@ -7,12 +7,21 @@ export type TableBuild = {
   ballSpawn: THREE.Vector3
   laneExitZ: number
   drainZ: number
+  bounds: { w: number; l: number; railMargin: number }
   colliderMeta: Map<number, ColliderMeta>
   bumpers: Array<{ body: RAPIER.RigidBody; color: THREE.Color }>
   targets: Array<{ colliderHandle: number; mesh: THREE.Mesh; lit: boolean }>
   dropTargets: Array<{ colliderHandle: number; mesh: THREE.Mesh; down: boolean }>
   spinner: { colliderHandle: number; body: RAPIER.RigidBody; mesh: THREE.Mesh } | null
   kickout: { sensorHandle: number; ejectDir: THREE.Vector3; position: THREE.Vector3 } | null
+  plunger: {
+    body: RAPIER.RigidBody
+    mesh: THREE.Object3D
+    zRest: number
+    zPullMax: number
+    x: number
+    y: number
+  } | null
   flippers: {
     left: { body: RAPIER.RigidBody; joint: RAPIER.RevoluteImpulseJoint }
     right: { body: RAPIER.RigidBody; joint: RAPIER.RevoluteImpulseJoint }
@@ -69,9 +78,10 @@ export function buildCadetTable(
   // - X: left(-) to right(+)
   // - Z: up-table(-) to down-table(+)
   const floorSize = { w: 6.4, l: 12.2 }
+  const bounds = { w: floorSize.w, l: floorSize.l, railMargin: 0.55 }
 
   // Shooter lane is on the right side (positive X).
-  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.35)
+  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.32)
   const laneExitZ = 2.25
   const drainZ = 5.85
 
@@ -140,9 +150,61 @@ export function buildCadetTable(
   addWall(0.18, wallH / 2, railT / 2, new THREE.Vector3(1.55, wallH / 2, 5.22), -0.06)
 
   // Shooter lane divider (inner wall).
-  addWall(railT / 2, wallH / 2, 2.25, new THREE.Vector3(1.82, wallH / 2, 3.75))
-  // Shooter backstop.
-  addWall(0.9, wallH / 2, railT / 2, new THREE.Vector3(2.55, wallH / 2, 5.82))
+  addWall(railT / 2, wallH / 2, 2.55, new THREE.Vector3(1.82, wallH / 2, 3.95))
+  // Shooter backstop (behind the plunger travel).
+  addWall(0.9, wallH / 2, railT / 2, new THREE.Vector3(2.55, wallH / 2, 6.08))
+
+  // Plunger (kinematic): pull (Space/Launch hold) then release to fire.
+  let plunger: TableBuild['plunger'] = null
+  {
+    const x = 2.55
+    const y = 0.14
+    const zRest = 5.55
+    const zPullMax = 5.93
+
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, zRest),
+    )
+    body.setEnabledTranslations(true, false, true, true)
+    body.setEnabledRotations(false, true, false, true)
+
+    const col = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(0.22, 0.12, 0.04)
+        .setFriction(0.18)
+        .setRestitution(0.05),
+      body,
+    )
+    colliderMeta.set(col.handle, { tag: 'wall', id: 'plunger' })
+
+    const g = new THREE.Group()
+    g.position.set(x, y, zRest)
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.22, 0.10), metal(0x0b0d1f, 0x7df9ff, 0.55))
+    head.position.set(0, 0.04, 0)
+    g.add(head)
+
+    const rod = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.05), metal(0x070812, 0x070812, 0.06))
+    rod.position.set(0, 0.03, 0.62)
+    g.add(rod)
+
+    const spring = new THREE.Group()
+    const rings: THREE.Mesh[] = []
+    const ringMat = metal(0x0b0d1f, 0xb44cff, 0.35)
+    for (let i = 0; i < 7; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.018, 10, 18), ringMat)
+      ring.rotation.x = Math.PI / 2
+      spring.add(ring)
+      rings.push(ring)
+    }
+    spring.position.set(0, 0.03, 0.20)
+    g.add(spring)
+
+    g.userData.spring = { rings, minZ: 0.18, maxZ: 0.88 }
+
+    table.add(g)
+
+    plunger = { body, mesh: g, zRest, zPullMax, x, y }
+  }
 
   // Slingshots (treated as bumpers).
   const slingSize = { x: 1.22, y: 0.18, z: 0.32 }
@@ -393,12 +455,13 @@ export function buildCadetTable(
     colliderMeta.set(col.handle, { tag: 'flipper', id: `flipper:${side}` })
 
     const jointData = RAPIER.JointData.revolute(
-      { x: -dir * hingeOffset, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
+      { x: -dir * hingeOffset, y: 0, z: 0 },
       { x: 0, y: 1, z: 0 },
     )
     const joint = world.createImpulseJoint(jointData, anchor, body, true) as RAPIER.RevoluteImpulseJoint
-    joint.setLimits(-0.65, 0.35)
+    if (side === 'left') joint.setLimits(-0.65, 0.35)
+    else joint.setLimits(-0.35, 0.65)
     joint.configureMotorModel(RAPIER.MotorModel.AccelerationBased)
 
     const mesh = new THREE.Mesh(flipperGeo, mat)
@@ -417,12 +480,14 @@ export function buildCadetTable(
     ballSpawn,
     laneExitZ,
     drainZ,
+    bounds,
     colliderMeta,
     bumpers,
     targets,
     dropTargets,
     spinner,
     kickout,
+    plunger,
     flippers: { left, right },
     staticMeshes,
   }

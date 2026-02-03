@@ -1,4 +1,4 @@
-import { GameApp } from '../game/GameApp'
+import { GameApp, type ViewMode } from '../game/GameApp'
 import type { ThemeId } from '../game/Theme'
 import { THEMES } from '../game/Theme'
 import { LeaderboardClient } from './leaderboard/LeaderboardClient'
@@ -12,6 +12,7 @@ export type UIControllerOptions = {
 export class UIController {
   private overlayEl!: HTMLDivElement
   private leaderboard = new LeaderboardClient()
+  private viewKey = 'ball3d:view:v1'
 
   private options: UIControllerOptions
 
@@ -33,12 +34,16 @@ export class UIController {
         <div id="hud" class="panel" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px;">
           <div style="display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;">
             <div style="font-weight:800; letter-spacing:0.6px;">CADET OPS</div>
-            <div style="opacity:.7; font-size:13px;">A/D 或 ←/→ 翻板，<span class="kbd">Space</span> 发射（按住蓄力）</div>
+            <div class="hud-hint" style="opacity:.7; font-size:13px;">A/D 或 ←/→ 翻板，<span class="kbd">Space</span> 发射（按住蓄力）</div>
           </div>
           <div style="display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; justify-content:flex-end;">
             <div>Score <span id="score" style="font-variant-numeric: tabular-nums; font-weight:800;">0</span></div>
             <div>x<span id="mult" style="font-variant-numeric: tabular-nums; font-weight:700;">1</span></div>
             <div>Balls <span id="balls" style="font-variant-numeric: tabular-nums; font-weight:700;">3</span></div>
+            <div class="charge-wrap" style="display:flex; align-items:center; gap:8px;">
+              <div style="opacity:.75; font-size:12px;">Charge</div>
+              <div class="chargebar"><div id="chargeFill" class="chargefill"></div></div>
+            </div>
             <button class="btn" id="btnTheme" title="切换主题">Theme</button>
             <button class="btn" id="btnMenu" title="菜单">Menu</button>
           </div>
@@ -64,6 +69,12 @@ export class UIController {
             <button class="btn btn-primary" id="btnPlay">Play</button>
             <button class="btn" id="btnRestart">Restart</button>
             <button class="btn" id="btnLeaderboard">Leaderboard</button>
+          </div>
+          <div style="height:10px;"></div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <div style="opacity:.75; font-size:13px;">View</div>
+            <button class="btn" id="btnViewFull">Full</button>
+            <button class="btn" id="btnViewFollow">Follow</button>
           </div>
           <div style="height:14px;"></div>
           <div class="panel" style="padding:12px; border-radius:12px; background:rgba(0,0,0,.18);">
@@ -92,6 +103,7 @@ export class UIController {
     const scoreEl = uiRoot.querySelector<HTMLSpanElement>('#score')!
     const multEl = uiRoot.querySelector<HTMLSpanElement>('#mult')!
     const ballsEl = uiRoot.querySelector<HTMLSpanElement>('#balls')!
+    const chargeFill = uiRoot.querySelector<HTMLDivElement>('#chargeFill')!
 
     uiRoot.querySelector<HTMLButtonElement>('#btnMenu')!.addEventListener('click', () => {
       this.showMenu()
@@ -102,6 +114,17 @@ export class UIController {
       this.renderTheme()
       void game.audio.click(next === 'neon' ? 820 : 520)
     })
+
+    const btnViewFull = uiRoot.querySelector<HTMLButtonElement>('#btnViewFull')!
+    const btnViewFollow = uiRoot.querySelector<HTMLButtonElement>('#btnViewFollow')!
+    const applyView = (mode: ViewMode) => {
+      localStorage.setItem(this.viewKey, mode)
+      game.setViewMode(mode)
+      btnViewFull.classList.toggle('btn-primary', mode === 'full')
+      btnViewFollow.classList.toggle('btn-primary', mode === 'follow')
+    }
+    const saved = localStorage.getItem(this.viewKey)
+    applyView(saved === 'follow' ? 'follow' : 'full')
 
     uiRoot.querySelector<HTMLButtonElement>('#btnClose')!.addEventListener('click', () => {
       this.hideMenu()
@@ -118,6 +141,9 @@ export class UIController {
       await this.renderLeaderboard()
     })
 
+    btnViewFull.addEventListener('click', () => applyView('full'))
+    btnViewFollow.addEventListener('click', () => applyView('follow'))
+
     const chkAudio = uiRoot.querySelector<HTMLInputElement>('#chkAudio')!
     chkAudio.addEventListener('change', () => {
       game.audio.setEnabled(chkAudio.checked)
@@ -128,10 +154,11 @@ export class UIController {
       void game.audio.click(900)
     })
 
-    game.events.on('hud', ({ score, multiplier, balls }) => {
+    game.events.on('hud', ({ score, multiplier, balls, launchCharge }) => {
       scoreEl.textContent = score.toString()
       multEl.textContent = multiplier.toString()
       ballsEl.textContent = balls.toString()
+      chargeFill.style.width = `${Math.round(Math.max(0, Math.min(1, launchCharge)) * 100)}%`
     })
 
     game.events.on('state', ({ phase }) => {

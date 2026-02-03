@@ -5,6 +5,7 @@ import type { ColliderMeta } from './physics/ObjectTags'
 import { buildCadetTable, setDropDown, setTargetLit } from './physics/TableCadet'
 import { Renderer3D } from './render/Renderer3D'
 import { Sparks } from './render/Sparks'
+import { computeFitDistance } from './render/fitCamera'
 import type { ThemeId } from './Theme'
 import { THEMES } from './Theme'
 import { Synth } from './audio/Synth'
@@ -16,6 +17,7 @@ type GameEvents = {
 }
 
 export type GamePhase = 'menu' | 'playing' | 'gameover'
+export type ViewMode = 'full' | 'follow'
 
 export type GameAppOptions = {
   canvas: HTMLCanvasElement
@@ -41,6 +43,12 @@ export class GameApp {
 
   private theme: ThemeId = 'neon'
   private phase: GamePhase = 'menu'
+  private viewMode: ViewMode = 'full'
+
+  private camBaseTarget = new THREE.Vector3(0, 0.25, 0)
+  private camDir = new THREE.Vector3(0, 1, 1)
+  private camDistance = 0
+  private camTarget = new THREE.Vector3(0, 0.25, 0)
 
   private score = 0
   private multiplier = 1
@@ -55,6 +63,10 @@ export class GameApp {
   private dropResetAt = 0
   private spinnerPrevYaw = 0
   private spinnerArc = 0
+
+  private plungerZ = 0
+  private plungerSpeed = 0
+  private plungerMode: 'idle' | 'pull' | 'fire' = 'idle'
 
   private raf = 0
   private accumulator = 0
@@ -74,9 +86,18 @@ export class GameApp {
     return this.theme
   }
 
+  getViewMode() {
+    return this.viewMode
+  }
+
   setTheme(theme: ThemeId) {
     this.theme = theme
     this.renderer.setTheme(THEMES[theme])
+  }
+
+  setViewMode(mode: ViewMode) {
+    this.viewMode = mode
+    this.updateCamera(true, 0)
   }
 
   async init() {
@@ -91,6 +112,10 @@ export class GameApp {
 
     this.table = buildCadetTable(this.world, this.renderer.scene, this.colliderMeta)
     this.createBall()
+
+    this.camDir.copy(this.renderer.camera.position).sub(this.camBaseTarget).normalize()
+    this.camTarget.copy(this.camBaseTarget)
+    this.updateCamera(true, 0)
 
     this.setTheme(this.theme)
 
@@ -147,6 +172,7 @@ export class GameApp {
 
   private onResize = () => {
     this.renderer.resize()
+    this.updateCamera(true, 0)
   }
 
   private loop = (t: number) => {
@@ -202,6 +228,16 @@ export class GameApp {
     this.inLane = forceLane
     this.kickoutLocked = false
     this.pendingKickoutEject = false
+
+    if (this.table.plunger) {
+      this.plungerMode = 'idle'
+      this.plungerSpeed = 0
+      this.plungerZ = this.table.plunger.zRest
+      this.table.plunger.body.setTranslation(
+        { x: this.table.plunger.x, y: this.table.plunger.y, z: this.plungerZ },
+        true,
+      )
+    }
   }
 
   private step(dt: number, nowMs: number) {
@@ -211,16 +247,32 @@ export class GameApp {
     this.driveFlippers(st.leftFlipper, st.rightFlipper)
 
     const release = this.input.consumeLaunchRelease()
+    let fireCharge = 0
+    let fireNow = false
     if (this.inLane && release.released) {
-      const t = Math.max(0, Math.min(1, release.charge))
-      const power = 3.25 + 18.5 * (t * t)
-      this.ballBody.applyImpulse({ x: 0, y: 0, z: -power }, true)
-      void this.audio.click(640 + 260 * t)
+      fireCharge = clamp01(release.charge)
+      fireNow = true
     }
 
     this.accumulator += dt
     while (this.accumulator >= this.fixedDt) {
       this.accumulator -= this.fixedDt
+
+      if (this.table.plunger) {
+        if (fireNow) {
+          this.startPlungerFire(fireCharge)
+          fireNow = false
+        }
+        this.tickPlunger(st, this.fixedDt)
+      } else if (this.inLane && fireNow) {
+        // Fallback: if a table has no plunger, use the classic impulse launch.
+        const t = fireCharge
+        const power = 3.25 + 18.5 * (t * t)
+        this.ballBody.applyImpulse({ x: 0, y: 0, z: -power }, true)
+        void this.audio.click(640 + 260 * t)
+        fireNow = false
+      }
+
       this.world.step(this.eventQueue)
       this.handleEvents()
       this.postStep()
@@ -234,7 +286,10 @@ export class GameApp {
 
     if (this.inLane && p.z < this.table.laneExitZ) this.inLane = false
 
-    if (p.y < -3 || p.z > this.table.drainZ + 0.15) {
+    const extra = 0.4
+    const halfW = this.table.bounds.w / 2 + this.table.bounds.railMargin
+    const halfL = this.table.bounds.l / 2 + this.table.bounds.railMargin
+    if (Math.abs(p.x) > halfW + extra || p.z < -halfL - extra || p.z > this.table.drainZ + extra) {
       this.onDrain()
       return
     }
@@ -492,24 +547,137 @@ export class GameApp {
       mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
     }
 
+    if (this.table.plunger) {
+      const tp = this.table.plunger.body.translation()
+      this.table.plunger.mesh.position.set(tp.x, tp.y, tp.z)
+      this.updatePlungerSpringVisual(this.table.plunger.mesh, tp.z)
+    }
+
     this.sparks.tick(dt)
 
-    const zFollow = clamp(p.z - 0.9, -4.6, 4.2)
-    const camTarget = new THREE.Vector3(p.x * 0.22, 0.25, zFollow)
-    this.renderer.camera.lookAt(camTarget)
+    this.updateCamera(false, dt)
     this.renderer.render()
   }
 
   private driveFlippers(leftDown: boolean, rightDown: boolean) {
     const leftTarget = leftDown ? 0.35 : -0.65
-    const rightTarget = rightDown ? 0.35 : -0.65
-    this.table.flippers.left.joint.configureMotorPosition(leftTarget, 180, 18)
-    this.table.flippers.right.joint.configureMotorPosition(rightTarget, 180, 18)
+    const rightTarget = rightDown ? -0.35 : 0.65
+    this.table.flippers.left.joint.configureMotorPosition(leftTarget, 220, 22)
+    this.table.flippers.right.joint.configureMotorPosition(rightTarget, 220, 22)
+  }
+
+  private startPlungerFire(charge: number) {
+    if (!this.table.plunger || !this.inLane) return
+    const plunger = this.table.plunger
+    const t = clamp01(charge)
+    const eased = t * t
+    // Ensure we're starting from at least the pulled position for this charge.
+    this.plungerZ = Math.max(this.plungerZ, lerp(plunger.zRest, plunger.zPullMax, eased))
+    const maxDist = Math.max(1e-6, plunger.zPullMax - plunger.zRest)
+    const dist = Math.max(0, this.plungerZ - plunger.zRest)
+    const n = Math.max(0, Math.min(1, dist / maxDist))
+    this.plungerMode = 'fire'
+    this.plungerSpeed = 16 + 34 * (n * n)
+    void this.audio.click(640 + 260 * n)
+  }
+
+  private tickPlunger(st: ReturnType<InputManager['getState']>, dt: number) {
+    if (!this.table.plunger) return
+    const plunger = this.table.plunger
+
+    if (!this.inLane) {
+      this.plungerMode = 'idle'
+      this.plungerSpeed = 0
+      this.plungerZ = plunger.zRest
+      plunger.body.setNextKinematicTranslation({ x: plunger.x, y: plunger.y, z: this.plungerZ })
+      return
+    }
+
+    if (st.launchPressed) {
+      this.plungerMode = 'pull'
+      const t = clamp01(st.launchCharge)
+      const eased = t * t
+      this.plungerZ = lerp(plunger.zRest, plunger.zPullMax, eased)
+      this.plungerSpeed = 0
+    } else if (this.plungerMode === 'fire') {
+      this.plungerZ -= this.plungerSpeed * dt
+      this.plungerSpeed *= Math.exp(-dt * 7.5)
+      if (this.plungerZ <= plunger.zRest + 0.0015) {
+        this.plungerZ = plunger.zRest
+        this.plungerMode = 'idle'
+        this.plungerSpeed = 0
+      }
+    } else {
+      this.plungerMode = 'idle'
+      this.plungerSpeed = 0
+      this.plungerZ = plunger.zRest
+    }
+
+    this.plungerZ = clamp(this.plungerZ, plunger.zRest, plunger.zPullMax)
+    plunger.body.setNextKinematicTranslation({ x: plunger.x, y: plunger.y, z: this.plungerZ })
+  }
+
+  private updatePlungerSpringVisual(mesh: THREE.Object3D, z: number) {
+    if (!this.table.plunger) return
+    const spring = (mesh.userData as any)?.spring
+    const rings = spring?.rings as THREE.Mesh[] | undefined
+    if (!rings || rings.length === 0) return
+    const minZ = Number(spring?.minZ ?? 0.18)
+    const maxZ = Number(spring?.maxZ ?? 0.88)
+    const t = (z - this.table.plunger.zRest) / Math.max(1e-6, this.table.plunger.zPullMax - this.table.plunger.zRest)
+    const pull = clamp01(t)
+    const span = lerp(maxZ - minZ, (maxZ - minZ) * 0.45, pull)
+    for (let i = 0; i < rings.length; i++) {
+      const u = rings.length === 1 ? 0.5 : i / (rings.length - 1)
+      rings[i].position.z = minZ + span * u
+    }
+  }
+
+  private updateCamera(forceFit: boolean, dt: number) {
+    const camera = this.renderer.camera
+    if (forceFit || this.camDistance === 0) {
+      this.camDistance = computeFitDistance({
+        camera,
+        target: this.camBaseTarget,
+        viewDir: this.camDir,
+        bounds: this.table.bounds,
+        safeNdc: 0.86,
+        yMin: -0.18,
+        yMax: 1.35,
+        minDistance: 4,
+        maxDistance: 60,
+      })
+    }
+
+    const desired = new THREE.Vector3().copy(this.camBaseTarget)
+    if (this.viewMode === 'follow' && this.phase === 'playing') {
+      const p = this.ballBody.translation()
+      desired.x += clamp(p.x * 0.12, -0.55, 0.55)
+      desired.z += clamp(p.z * 0.12, -0.85, 1.15)
+    }
+
+    if (dt > 0) {
+      const k = 1 - Math.exp(-dt * 6)
+      this.camTarget.lerp(desired, k)
+    } else {
+      this.camTarget.copy(desired)
+    }
+
+    camera.position.copy(this.camTarget).addScaledVector(this.camDir, this.camDistance)
+    camera.lookAt(this.camTarget)
   }
 }
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
+}
+
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v))
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t
 }
 
 function wrapAngleRad(a: number) {
