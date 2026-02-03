@@ -1,9 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { kv } from './_lib/kv'
 
 const KEY = 'ball3d:lb:table1:v1'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })

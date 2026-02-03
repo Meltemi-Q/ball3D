@@ -1,4 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { kv, ratelimit } from './_lib/kv'
 
 const KEY = 'ball3d:lb:table1:v1'
@@ -9,7 +8,7 @@ function sanitizeName(name: unknown) {
   return safe || 'Anonymous'
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
   if (req.method !== 'POST') return res.status(405).send('Method not allowed')
