@@ -13,6 +13,7 @@ export class UIController {
   private overlayEl!: HTMLDivElement
   private leaderboard = new LeaderboardClient()
   private viewKey = 'ball3d:view:v1'
+  private zoomKey = 'ball3d:zoom:v1'
 
   private options: UIControllerOptions
 
@@ -76,6 +77,13 @@ export class UIController {
             <button class="btn" id="btnViewFull">Full</button>
             <button class="btn" id="btnViewFollow">Follow</button>
           </div>
+          <div style="height:10px;"></div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <div style="opacity:.75; font-size:13px;">Zoom</div>
+            <input id="rngZoom" type="range" min="90" max="115" step="1" value="100"
+              style="flex:1; min-width:180px; accent-color: var(--accent);" />
+            <div id="zoomVal" style="opacity:.8; font-size:12px; width:52px; text-align:right;">100%</div>
+          </div>
           <div style="height:14px;"></div>
           <div class="panel" style="padding:12px; border-radius:12px; background:rgba(0,0,0,.18);">
             <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
@@ -117,6 +125,8 @@ export class UIController {
 
     const btnViewFull = uiRoot.querySelector<HTMLButtonElement>('#btnViewFull')!
     const btnViewFollow = uiRoot.querySelector<HTMLButtonElement>('#btnViewFollow')!
+    const rngZoom = uiRoot.querySelector<HTMLInputElement>('#rngZoom')!
+    const zoomVal = uiRoot.querySelector<HTMLDivElement>('#zoomVal')!
     const applyView = (mode: ViewMode) => {
       localStorage.setItem(this.viewKey, mode)
       game.setViewMode(mode)
@@ -125,6 +135,20 @@ export class UIController {
     }
     const saved = localStorage.getItem(this.viewKey)
     applyView(saved === 'follow' ? 'follow' : 'full')
+
+    const applyZoom = (zoom: number) => {
+      const z = Math.max(0.85, Math.min(1.15, zoom))
+      game.setCameraZoom(z)
+      zoomVal.textContent = `${Math.round(z * 100)}%`
+      rngZoom.value = String(Math.round(z * 100))
+      localStorage.setItem(this.zoomKey, String(z))
+    }
+    const savedZoom = Number(localStorage.getItem(this.zoomKey) ?? '1')
+    applyZoom(Number.isFinite(savedZoom) ? savedZoom : 1)
+    rngZoom.addEventListener('input', () => {
+      const v = Number(rngZoom.value) / 100
+      applyZoom(v)
+    })
 
     uiRoot.querySelector<HTMLButtonElement>('#btnClose')!.addEventListener('click', () => {
       this.hideMenu()

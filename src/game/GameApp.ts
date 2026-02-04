@@ -44,6 +44,7 @@ export class GameApp {
   private theme: ThemeId = 'neon'
   private phase: GamePhase = 'menu'
   private viewMode: ViewMode = 'full'
+  private camZoom = 1
 
   private camBaseTarget = new THREE.Vector3(0, 0.25, 0)
   private camDir = new THREE.Vector3(0, 1, 1)
@@ -66,7 +67,8 @@ export class GameApp {
 
   private plungerZ = 0
   private plungerSpeed = 0
-  private plungerMode: 'idle' | 'pull' | 'fire' = 'idle'
+  private plungerMode: 'idle' | 'pull' | 'fire' | 'return' = 'idle'
+  private plungerFireMinZ = 0
 
   private raf = 0
   private accumulator = 0
@@ -90,6 +92,10 @@ export class GameApp {
     return this.viewMode
   }
 
+  getCameraZoom() {
+    return this.camZoom
+  }
+
   setTheme(theme: ThemeId) {
     this.theme = theme
     this.renderer.setTheme(THEMES[theme])
@@ -97,6 +103,11 @@ export class GameApp {
 
   setViewMode(mode: ViewMode) {
     this.viewMode = mode
+    this.updateCamera(true, 0)
+  }
+
+  setCameraZoom(zoom: number) {
+    this.camZoom = clamp(zoom, 0.85, 1.15)
     this.updateCamera(true, 0)
   }
 
@@ -113,7 +124,7 @@ export class GameApp {
     this.table = buildCadetTable(this.world, this.renderer.scene, this.colliderMeta)
     this.createBall()
 
-    this.camDir.copy(this.renderer.camera.position).sub(this.camBaseTarget).normalize()
+    this.camDir.set(0, 1.08, 0.86).normalize()
     this.camTarget.copy(this.camBaseTarget)
     this.updateCamera(true, 0)
 
@@ -233,6 +244,7 @@ export class GameApp {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerZ = this.table.plunger.zRest
+      this.plungerFireMinZ = this.table.plunger.zRest
       this.table.plunger.body.setTranslation(
         { x: this.table.plunger.x, y: this.table.plunger.y, z: this.plungerZ },
         true,
@@ -284,7 +296,17 @@ export class GameApp {
   private postStep() {
     const p = this.ballBody.translation()
 
-    if (this.inLane && p.z < this.table.laneExitZ) this.inLane = false
+    if (this.inLane) {
+      if (p.z < this.table.laneExitZ) this.inLane = false
+      const lane = this.getShooterLaneBounds()
+      if (lane && (p.x < lane.xMin || p.x > lane.xMax)) this.inLane = false
+
+      // Safety: if the ball ends up behind the plunger/backstop, reset it.
+      if (this.table.plunger && p.z > this.table.plunger.zPullMax + 0.35) {
+        this.spawnBall(true)
+        return
+      }
+    }
 
     const extra = 0.4
     const halfW = this.table.bounds.w / 2 + this.table.bounds.railMargin
@@ -559,6 +581,24 @@ export class GameApp {
     this.renderer.render()
   }
 
+  private getShooterLaneBounds() {
+    if (!this.table.plunger) return null
+    const cx = this.table.plunger.x
+    // Shooter lane is narrow: clamp to a conservative range so "inLane" doesn't stick.
+    return { xMin: cx - 0.72, xMax: cx + 0.72 }
+  }
+
+  private isBallInShooterLane(p: { x: number; y: number; z: number }) {
+    const lane = this.getShooterLaneBounds()
+    if (!lane) return false
+    if (p.x < lane.xMin || p.x > lane.xMax) return false
+    // Must still be in the lane region along Z (hasn't exited up-table).
+    if (p.z < this.table.laneExitZ - 0.08) return false
+    // If it somehow drifts too far down-table, treat as invalid.
+    if (p.z > this.table.drainZ + 0.4) return false
+    return true
+  }
+
   private driveFlippers(leftDown: boolean, rightDown: boolean) {
     const leftTarget = leftDown ? 0.35 : -0.65
     const rightTarget = rightDown ? -0.35 : 0.65
@@ -568,6 +608,11 @@ export class GameApp {
 
   private startPlungerFire(charge: number) {
     if (!this.table.plunger || !this.inLane) return
+    const p = this.ballBody.translation()
+    if (!this.isBallInShooterLane(p)) {
+      this.inLane = false
+      return
+    }
     const plunger = this.table.plunger
     const t = clamp01(charge)
     const eased = t * t
@@ -577,7 +622,8 @@ export class GameApp {
     const dist = Math.max(0, this.plungerZ - plunger.zRest)
     const n = Math.max(0, Math.min(1, dist / maxDist))
     this.plungerMode = 'fire'
-    this.plungerSpeed = 16 + 34 * (n * n)
+    this.plungerFireMinZ = plunger.zRest - 0.22 * n
+    this.plungerSpeed = 22 + 54 * (n * n)
     void this.audio.click(640 + 260 * n)
   }
 
@@ -589,6 +635,7 @@ export class GameApp {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerZ = plunger.zRest
+      this.plungerFireMinZ = plunger.zRest
       plunger.body.setNextKinematicTranslation({ x: plunger.x, y: plunger.y, z: this.plungerZ })
       return
     }
@@ -599,21 +646,33 @@ export class GameApp {
       const eased = t * t
       this.plungerZ = lerp(plunger.zRest, plunger.zPullMax, eased)
       this.plungerSpeed = 0
+      this.plungerFireMinZ = plunger.zRest
     } else if (this.plungerMode === 'fire') {
       this.plungerZ -= this.plungerSpeed * dt
       this.plungerSpeed *= Math.exp(-dt * 7.5)
-      if (this.plungerZ <= plunger.zRest + 0.0015) {
+      if (this.plungerZ <= this.plungerFireMinZ) {
+        this.plungerZ = this.plungerFireMinZ
+        this.plungerMode = 'return'
+        this.plungerSpeed = 28
+      }
+    } else if (this.plungerMode === 'return') {
+      this.plungerZ += this.plungerSpeed * dt
+      this.plungerSpeed *= Math.exp(-dt * 7.0)
+      if (this.plungerZ >= plunger.zRest - 0.0015) {
         this.plungerZ = plunger.zRest
         this.plungerMode = 'idle'
         this.plungerSpeed = 0
+        this.plungerFireMinZ = plunger.zRest
       }
     } else {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerZ = plunger.zRest
+      this.plungerFireMinZ = plunger.zRest
     }
 
-    this.plungerZ = clamp(this.plungerZ, plunger.zRest, plunger.zPullMax)
+    const minZ = Math.min(plunger.zRest, this.plungerFireMinZ)
+    this.plungerZ = clamp(this.plungerZ, minZ, plunger.zPullMax)
     plunger.body.setNextKinematicTranslation({ x: plunger.x, y: plunger.y, z: this.plungerZ })
   }
 
@@ -636,15 +695,21 @@ export class GameApp {
   private updateCamera(forceFit: boolean, dt: number) {
     const camera = this.renderer.camera
     if (forceFit || this.camDistance === 0) {
+      const aspect = camera.aspect || 1
+      let baseSafe = 0.92
+      if (aspect >= 1.35) baseSafe = 0.95
+      else if (aspect <= 0.85) baseSafe = 0.88
+      const safeNdc = clamp(baseSafe * this.camZoom, 0.82, 0.97)
+
       this.camDistance = computeFitDistance({
         camera,
         target: this.camBaseTarget,
         viewDir: this.camDir,
         bounds: this.table.bounds,
-        safeNdc: 0.86,
-        yMin: -0.18,
-        yMax: 1.35,
-        minDistance: 4,
+        safeNdc,
+        yMin: -0.14,
+        yMax: 1.15,
+        minDistance: 3.5,
         maxDistance: 60,
       })
     }
