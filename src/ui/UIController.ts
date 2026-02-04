@@ -80,7 +80,7 @@ export class UIController {
           <div style="height:10px;"></div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
             <div style="opacity:.75; font-size:13px;">Zoom</div>
-            <input id="rngZoom" type="range" min="90" max="115" step="1" value="100"
+            <input id="rngZoom" type="range" min="90" max="135" step="1" value="100"
               style="flex:1; min-width:180px; accent-color: var(--accent);" />
             <div id="zoomVal" style="opacity:.8; font-size:12px; width:52px; text-align:right;">100%</div>
           </div>
@@ -137,14 +137,16 @@ export class UIController {
     applyView(saved === 'follow' ? 'follow' : 'full')
 
     const applyZoom = (zoom: number) => {
-      const z = Math.max(0.85, Math.min(1.15, zoom))
+      const z = Math.max(0.9, Math.min(1.35, zoom))
       game.setCameraZoom(z)
       zoomVal.textContent = `${Math.round(z * 100)}%`
       rngZoom.value = String(Math.round(z * 100))
       localStorage.setItem(this.zoomKey, String(z))
     }
-    const savedZoom = Number(localStorage.getItem(this.zoomKey) ?? '1')
-    applyZoom(Number.isFinite(savedZoom) ? savedZoom : 1)
+    const savedZoomRaw = localStorage.getItem(this.zoomKey)
+    const defaultZoom = window.innerWidth / Math.max(1, window.innerHeight) >= 1.35 ? 1.1 : 1.0
+    const savedZoom = savedZoomRaw === null ? defaultZoom : Number(savedZoomRaw)
+    applyZoom(Number.isFinite(savedZoom) ? savedZoom : defaultZoom)
     rngZoom.addEventListener('input', () => {
       const v = Number(rngZoom.value) / 100
       applyZoom(v)

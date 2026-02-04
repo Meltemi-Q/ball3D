@@ -31,6 +31,10 @@ export class GameApp {
   private renderer: Renderer3D
   private sparks = new Sparks()
 
+  private readonly ballRadius = 0.18
+  private readonly plungerHalfZ = 0.07
+  private readonly plungerMaxPenetration = 0.06
+
   private rapierReady = false
   private world!: RAPIER.World
   private eventQueue!: RAPIER.EventQueue
@@ -68,7 +72,7 @@ export class GameApp {
   private plungerZ = 0
   private plungerSpeed = 0
   private plungerMode: 'idle' | 'pull' | 'fire' | 'return' = 'idle'
-  private plungerFireMinZ = 0
+  private laneStuckMs = 0
 
   private raf = 0
   private accumulator = 0
@@ -107,7 +111,7 @@ export class GameApp {
   }
 
   setCameraZoom(zoom: number) {
-    this.camZoom = clamp(zoom, 0.85, 1.15)
+    this.camZoom = clamp(zoom, 0.85, 1.35)
     this.updateCamera(true, 0)
   }
 
@@ -199,7 +203,7 @@ export class GameApp {
   }
 
   private createBall() {
-    const r = 0.18
+    const r = this.ballRadius
     const ballGeo = new THREE.SphereGeometry(r, 28, 18)
     const ballMat = new THREE.MeshStandardMaterial({
       color: 0xbfd2ff,
@@ -239,12 +243,12 @@ export class GameApp {
     this.inLane = forceLane
     this.kickoutLocked = false
     this.pendingKickoutEject = false
+    this.laneStuckMs = 0
 
     if (this.table.plunger) {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerZ = this.table.plunger.zRest
-      this.plungerFireMinZ = this.table.plunger.zRest
       this.table.plunger.body.setTranslation(
         { x: this.table.plunger.x, y: this.table.plunger.y, z: this.plungerZ },
         true,
@@ -287,13 +291,13 @@ export class GameApp {
 
       this.world.step(this.eventQueue)
       this.handleEvents()
-      this.postStep()
+      this.postStep(st, this.fixedDt)
     }
 
     if (this.phase === 'playing') this.tickScripted(nowMs)
   }
 
-  private postStep() {
+  private postStep(st: ReturnType<InputManager['getState']>, dt: number) {
     const p = this.ballBody.translation()
 
     if (this.inLane) {
@@ -301,10 +305,27 @@ export class GameApp {
       const lane = this.getShooterLaneBounds()
       if (lane && (p.x < lane.xMin || p.x > lane.xMax)) this.inLane = false
 
-      // Safety: if the ball ends up behind the plunger/backstop, reset it.
-      if (this.table.plunger && p.z > this.table.plunger.zPullMax + 0.35) {
-        this.spawnBall(true)
-        return
+      if (this.table.plunger) {
+        const canRescue = !st.launchPressed || this.plungerMode !== 'pull'
+
+        // Safety: if the ball ends up behind the plunger, reset it.
+        if (canRescue && p.z > this.table.plunger.zRest + 0.45) {
+          this.spawnBall(true)
+          return
+        }
+
+        const v = this.ballBody.linvel()
+        const speed = Math.hypot(v.x, v.z)
+        const expectedLaneZ = this.table.plunger.zRest - (this.ballRadius + this.plungerHalfZ)
+        const looksStuck = p.z > expectedLaneZ + 0.12
+        if (canRescue && looksStuck && speed < 0.05) this.laneStuckMs += dt * 1000
+        else this.laneStuckMs = 0
+        if (this.laneStuckMs >= 800) {
+          this.spawnBall(true)
+          return
+        }
+      } else {
+        this.laneStuckMs = 0
       }
     }
 
@@ -599,6 +620,10 @@ export class GameApp {
     return true
   }
 
+  private getPlungerMinZAllowed(ballZ: number) {
+    return ballZ + (this.ballRadius + this.plungerHalfZ) - this.plungerMaxPenetration
+  }
+
   private driveFlippers(leftDown: boolean, rightDown: boolean) {
     const leftTarget = leftDown ? 0.35 : -0.65
     const rightTarget = rightDown ? -0.35 : 0.65
@@ -622,8 +647,8 @@ export class GameApp {
     const dist = Math.max(0, this.plungerZ - plunger.zRest)
     const n = Math.max(0, Math.min(1, dist / maxDist))
     this.plungerMode = 'fire'
-    this.plungerFireMinZ = plunger.zRest - 0.22 * n
-    this.plungerSpeed = 22 + 54 * (n * n)
+    // Keep the per-step displacement stable: fixedDt≈1/120, so speed<=30 keeps Δz<=0.25.
+    this.plungerSpeed = 12 + 18 * (n * n)
     void this.audio.click(640 + 260 * n)
   }
 
@@ -635,7 +660,6 @@ export class GameApp {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerZ = plunger.zRest
-      this.plungerFireMinZ = plunger.zRest
       plunger.body.setNextKinematicTranslation({ x: plunger.x, y: plunger.y, z: this.plungerZ })
       return
     }
@@ -646,33 +670,38 @@ export class GameApp {
       const eased = t * t
       this.plungerZ = lerp(plunger.zRest, plunger.zPullMax, eased)
       this.plungerSpeed = 0
-      this.plungerFireMinZ = plunger.zRest
     } else if (this.plungerMode === 'fire') {
+      const ballZ = this.ballBody.translation().z
+      const zMinAllowed = this.getPlungerMinZAllowed(ballZ)
+      const fireTargetZ = plunger.zRest - this.plungerMaxPenetration
+      const stopZ = Math.max(fireTargetZ, zMinAllowed)
       this.plungerZ -= this.plungerSpeed * dt
-      this.plungerSpeed *= Math.exp(-dt * 7.5)
-      if (this.plungerZ <= this.plungerFireMinZ) {
-        this.plungerZ = this.plungerFireMinZ
+      if (this.plungerZ <= stopZ + 0.0005) {
+        this.plungerZ = stopZ
         this.plungerMode = 'return'
-        this.plungerSpeed = 28
+        this.plungerSpeed = 20
       }
+      // Avoid "teleporting" past the ball.
+      this.plungerZ = Math.max(this.plungerZ, stopZ)
+      this.plungerSpeed *= Math.exp(-dt * 7.5)
     } else if (this.plungerMode === 'return') {
+      const ballZ = this.ballBody.translation().z
+      const zMinAllowed = this.getPlungerMinZAllowed(ballZ)
       this.plungerZ += this.plungerSpeed * dt
       this.plungerSpeed *= Math.exp(-dt * 7.0)
+      this.plungerZ = Math.max(this.plungerZ, zMinAllowed)
       if (this.plungerZ >= plunger.zRest - 0.0015) {
         this.plungerZ = plunger.zRest
         this.plungerMode = 'idle'
         this.plungerSpeed = 0
-        this.plungerFireMinZ = plunger.zRest
       }
     } else {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerZ = plunger.zRest
-      this.plungerFireMinZ = plunger.zRest
     }
 
-    const minZ = Math.min(plunger.zRest, this.plungerFireMinZ)
-    this.plungerZ = clamp(this.plungerZ, minZ, plunger.zPullMax)
+    this.plungerZ = clamp(this.plungerZ, plunger.zRest - this.plungerMaxPenetration, plunger.zPullMax)
     plunger.body.setNextKinematicTranslation({ x: plunger.x, y: plunger.y, z: this.plungerZ })
   }
 
@@ -699,7 +728,7 @@ export class GameApp {
       let baseSafe = 0.92
       if (aspect >= 1.35) baseSafe = 0.95
       else if (aspect <= 0.85) baseSafe = 0.88
-      const safeNdc = clamp(baseSafe * this.camZoom, 0.82, 0.97)
+      const safeNdc = clamp(baseSafe * this.camZoom, 0.82, 0.99)
 
       this.camDistance = computeFitDistance({
         camera,

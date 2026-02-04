@@ -81,7 +81,7 @@ export function buildCadetTable(
   const bounds = { w: floorSize.w, l: floorSize.l, railMargin: 0.55 }
 
   // Shooter lane is on the right side (positive X).
-  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.3)
+  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.15)
   const laneExitZ = 2.25
   const drainZ = 5.85
 
@@ -150,15 +150,18 @@ export function buildCadetTable(
   // Bottom apron guides (low height so they don't block the flippers visually).
   // Keep the center open: missing the flippers should drain the ball.
   addWall(1.05, apronY, railT / 2, new THREE.Vector3(-2.55, apronY, 5.62), 0.22)
-  addWall(0.85, apronY, railT / 2, new THREE.Vector3(2.25, apronY, 5.62), -0.22)
+  // Right side stays on the playfield side of the shooter divider (avoid blocking the shooter lane).
+  addWall(0.65, apronY, railT / 2, new THREE.Vector3(1.15, apronY, 5.62), -0.22)
   // Outlane separators (left/right).
   addWall(railT / 2, apronY, 0.95, new THREE.Vector3(-2.25, apronY, 5.55), 0.0)
-  addWall(railT / 2, apronY, 0.95, new THREE.Vector3(2.35, apronY, 5.55), 0.0)
+  addWall(railT / 2, apronY, 0.65, new THREE.Vector3(1.55, apronY, 5.55), 0.0)
 
   // Shooter lane divider (inner wall).
   addWall(railT / 2, wallH / 2, 2.55, new THREE.Vector3(1.82, wallH / 2, 3.95))
   // Shooter backstop (behind the plunger travel).
   addWall(0.9, wallH / 2, railT / 2, new THREE.Vector3(2.55, wallH / 2, 6.25))
+  // Shooter lane bottom-right corner guide: prevents the ball from settling into a dead pocket.
+  addWall(0.22, apronY, 0.12, new THREE.Vector3(2.9, apronY, 6.05), Math.PI / 4)
 
   // Plunger (kinematic): pull (Space/Launch hold) then release to fire.
   let plunger: TableBuild['plunger'] = null
