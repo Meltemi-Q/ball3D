@@ -81,7 +81,7 @@ export function buildCadetTable(
   const bounds = { w: floorSize.w, l: floorSize.l, railMargin: 0.55 }
 
   // Shooter lane is on the right side (positive X).
-  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.15)
+  const ballSpawn = new THREE.Vector3(2.55, 0.18, 5.3)
   const laneExitZ = 2.25
   const drainZ = 5.85
 
@@ -178,7 +178,7 @@ export function buildCadetTable(
     body.setEnabledRotations(false, true, false, true)
 
     const col = world.createCollider(
-      RAPIER.ColliderDesc.cuboid(0.56, 0.12, 0.07)
+      RAPIER.ColliderDesc.cuboid(0.58, 0.12, 0.07)
         .setFriction(0.18)
         .setRestitution(0.05),
       body,
@@ -188,7 +188,8 @@ export function buildCadetTable(
     const g = new THREE.Group()
     g.position.set(x, y, zRest)
 
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.22, 0.10), metal(0x0b0d1f, 0x7df9ff, 0.55))
+    // Wide "face plate" so the ball always stays visibly on top (matches physics collider footprint).
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.22, 0.14), metal(0x0b0d1f, 0x7df9ff, 0.55))
     head.position.set(0, 0.04, 0)
     g.add(head)
 

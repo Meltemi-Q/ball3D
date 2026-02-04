@@ -73,6 +73,7 @@ export class GameApp {
   private plungerSpeed = 0
   private plungerMode: 'idle' | 'pull' | 'fire' | 'return' = 'idle'
   private laneStuckMs = 0
+  private laneXLocked = false
 
   private raf = 0
   private accumulator = 0
@@ -244,6 +245,7 @@ export class GameApp {
     this.kickoutLocked = false
     this.pendingKickoutEject = false
     this.laneStuckMs = 0
+    this.laneXLocked = false
 
     if (this.table.plunger) {
       this.plungerMode = 'idle'
@@ -306,6 +308,8 @@ export class GameApp {
       if (lane && (p.x < lane.xMin || p.x > lane.xMax)) this.inLane = false
 
       if (this.table.plunger) {
+        this.lockBallToShooterLane()
+
         const canRescue = !st.launchPressed || this.plungerMode !== 'pull'
 
         // Safety: if the ball ends up behind the plunger, reset it.
@@ -321,13 +325,16 @@ export class GameApp {
         if (canRescue && looksStuck && speed < 0.05) this.laneStuckMs += dt * 1000
         else this.laneStuckMs = 0
         if (this.laneStuckMs >= 800) {
-          this.spawnBall(true)
-          return
+          // Clear without teleporting: a short auto-fire nudges the ball out of any micro-pocket.
+          this.startPlungerFire(0.22)
+          this.laneStuckMs = 0
         }
       } else {
         this.laneStuckMs = 0
       }
     }
+
+    if (!this.inLane) this.unlockBallFromShooterLane()
 
     const extra = 0.4
     const halfW = this.table.bounds.w / 2 + this.table.bounds.railMargin
@@ -622,6 +629,24 @@ export class GameApp {
 
   private getPlungerMinZAllowed(ballZ: number) {
     return ballZ + (this.ballRadius + this.plungerHalfZ) - this.plungerMaxPenetration
+  }
+
+  private lockBallToShooterLane() {
+    if (!this.table.plunger || this.laneXLocked) return
+    // The shooter lane should behave like a narrow 1D track; lock X so the ball can't slip beside the plunger.
+    const x = this.table.ballSpawn.x
+    const p = this.ballBody.translation()
+    this.ballBody.setTranslation({ x, y: p.y, z: p.z }, true)
+    const v = this.ballBody.linvel()
+    this.ballBody.setLinvel({ x: 0, y: 0, z: v.z }, true)
+    this.ballBody.setEnabledTranslations(false, false, true, true)
+    this.laneXLocked = true
+  }
+
+  private unlockBallFromShooterLane() {
+    if (!this.laneXLocked) return
+    this.ballBody.setEnabledTranslations(true, false, true, true)
+    this.laneXLocked = false
   }
 
   private driveFlippers(leftDown: boolean, rightDown: boolean) {
