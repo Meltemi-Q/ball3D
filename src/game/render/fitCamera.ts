@@ -17,7 +17,7 @@ export function computeFitDistance(opts: {
   minDistance?: number
   maxDistance?: number
 }) {
-  const safe = Math.max(0.5, Math.min(0.98, opts.safeNdc ?? 0.92))
+  const safe = Math.max(0.5, Math.min(0.995, opts.safeNdc ?? 0.92))
   const hx = opts.bounds.w / 2 + opts.bounds.railMargin
   const hz = opts.bounds.l / 2 + opts.bounds.railMargin
   const yMin = opts.yMin ?? -0.25
@@ -62,4 +62,3 @@ export function computeFitDistance(opts: {
 
   return hi
 }
-

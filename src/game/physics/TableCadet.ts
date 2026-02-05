@@ -121,10 +121,13 @@ export function buildCadetTable(
   const apronH = 0.32
   const apronY = apronH / 2
 
-  const addWall = (sx: number, sy: number, sz: number, pos: THREE.Vector3, yaw = 0) => {
-    const geo = new THREE.BoxGeometry(sx * 2, sy * 2, sz * 2)
+  const addWall = (sx: number, sy: number, sz: number, pos: THREE.Vector3, yaw = 0, syVisual?: number) => {
+    const visY = syVisual ?? sy
+    const geo = new THREE.BoxGeometry(sx * 2, visY * 2, sz * 2)
     const mesh = new THREE.Mesh(geo, railMat)
     mesh.position.copy(pos)
+    // For low apron guides, keep the physics height but render a thinner wall so it doesn't occlude flippers.
+    if (syVisual !== undefined) mesh.position.y = visY
     mesh.rotation.y = yaw
     table.add(mesh)
     staticMeshes.push(mesh)
@@ -149,12 +152,12 @@ export function buildCadetTable(
 
   // Bottom apron guides (low height so they don't block the flippers visually).
   // Keep the center open: missing the flippers should drain the ball.
-  addWall(1.05, apronY, railT / 2, new THREE.Vector3(-2.55, apronY, 5.62), 0.22)
+  addWall(1.05, apronY, railT / 2, new THREE.Vector3(-2.55, apronY, 5.62), 0.22, 0.045)
   // Right side stays on the playfield side of the shooter divider (avoid blocking the shooter lane).
-  addWall(0.65, apronY, railT / 2, new THREE.Vector3(1.15, apronY, 5.62), -0.22)
+  addWall(0.65, apronY, railT / 2, new THREE.Vector3(1.15, apronY, 5.62), -0.22, 0.045)
   // Outlane separators (left/right).
-  addWall(railT / 2, apronY, 0.95, new THREE.Vector3(-2.25, apronY, 5.55), 0.0)
-  addWall(railT / 2, apronY, 0.65, new THREE.Vector3(1.55, apronY, 5.55), 0.0)
+  addWall(railT / 2, apronY, 0.95, new THREE.Vector3(-2.25, apronY, 5.55), 0.0, 0.045)
+  addWall(railT / 2, apronY, 0.65, new THREE.Vector3(1.55, apronY, 5.55), 0.0, 0.045)
 
   // Shooter lane divider (inner wall).
   addWall(railT / 2, wallH / 2, 2.55, new THREE.Vector3(1.82, wallH / 2, 3.95))
