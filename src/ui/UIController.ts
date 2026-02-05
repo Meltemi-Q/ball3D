@@ -13,7 +13,7 @@ export class UIController {
   private overlayEl!: HTMLDivElement
   private leaderboard = new LeaderboardClient()
   private viewKey = 'ball3d:view:v1'
-  private zoomKey = 'ball3d:zoom:v1'
+  private zoomKey = 'ball3d:zoom:v2'
 
   private options: UIControllerOptions
 
