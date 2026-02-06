@@ -153,14 +153,14 @@ export function buildCadetTable(
   // Bottom apron guides (low height so they don't block the flippers visually).
   // Keep the center open: missing the flippers should drain the ball.
   addWall(1.05, apronY, railT / 2, new THREE.Vector3(-2.55, apronY, 5.62), 0.22, 0.045)
-  // Right side stays on the playfield side of the shooter divider (avoid blocking the shooter lane).
-  addWall(0.65, apronY, railT / 2, new THREE.Vector3(1.15, apronY, 5.62), -0.22, 0.045)
+  // Right bottom guide is kept farther right to avoid clipping the red flipper swing area.
+  addWall(0.52, apronY, railT / 2, new THREE.Vector3(1.95, apronY, 5.58), -0.2, 0.04)
   // Outlane separators (left/right).
   addWall(railT / 2, apronY, 0.95, new THREE.Vector3(-2.25, apronY, 5.55), 0.0, 0.045)
-  addWall(railT / 2, apronY, 0.65, new THREE.Vector3(1.55, apronY, 5.55), 0.0, 0.045)
+  addWall(railT / 2, apronY, 0.7, new THREE.Vector3(2.18, apronY, 5.52), 0.0, 0.04)
 
   // Shooter lane divider (inner wall).
-  addWall(railT / 2, wallH / 2, 2.55, new THREE.Vector3(1.82, wallH / 2, 3.95))
+  addWall(railT / 2, wallH / 2, 2.55, new THREE.Vector3(1.82, wallH / 2, 3.95), 0, 0.11)
   // Shooter backstop (behind the plunger travel).
   addWall(0.9, wallH / 2, railT / 2, new THREE.Vector3(2.55, wallH / 2, 6.25))
   // Shooter lane bottom-right corner guide: prevents the ball from settling into a dead pocket.

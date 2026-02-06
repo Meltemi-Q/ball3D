@@ -33,7 +33,7 @@ export class GameApp {
 
   private readonly ballRadius = 0.18
   private readonly plungerHalfZ = 0.07
-  private readonly plungerMaxPenetration = 0.06
+  private readonly plungerMaxPenetration = 0.12
 
   private rapierReady = false
   private world!: RAPIER.World
@@ -74,9 +74,10 @@ export class GameApp {
   private plungerMode: 'idle' | 'pull' | 'fire' | 'return' = 'idle'
   private plungerFireZ = 0
   private plungerFireMs = 0
-  private readonly plungerFireMaxMs = 280
+  private plungerFireCharge = 0
+  private readonly plungerFireMaxMs = 320
   private readonly plungerFireStrokeMin = 0.1
-  private readonly plungerFireStrokeMax = 0.42
+  private readonly plungerFireStrokeMax = 0.58
   private laneStuckMs = 0
   private laneRescueCount = 0
   private laneXLocked = false
@@ -261,6 +262,7 @@ export class GameApp {
       this.plungerSpeed = 0
       this.plungerFireZ = 0
       this.plungerFireMs = 0
+      this.plungerFireCharge = 0
       this.plungerZ = this.table.plunger.zRest
       this.table.plunger.body.setTranslation(
         { x: this.table.plunger.x, y: this.table.plunger.y, z: this.plungerZ },
@@ -352,7 +354,7 @@ export class GameApp {
     const extra = 0.4
     const halfW = this.table.bounds.w / 2 + this.table.bounds.railMargin
     const halfL = this.table.bounds.l / 2 + this.table.bounds.railMargin
-    if (Math.abs(p.x) > halfW + extra || p.z < -halfL - extra || p.z > this.table.drainZ + extra) {
+    if (Math.abs(p.x) > halfW + extra || p.z < -halfL - extra || p.z > halfL + extra) {
       this.onDrain()
       return
     }
@@ -684,9 +686,10 @@ export class GameApp {
     const fireStroke = lerp(this.plungerFireStrokeMin, this.plungerFireStrokeMax, n)
     this.plungerFireZ = plunger.zRest - fireStroke
     this.plungerFireMs = 0
+    this.plungerFireCharge = n
     this.plungerMode = 'fire'
     // Stronger launch but still stable per-step under fixedDt≈1/120.
-    this.plungerSpeed = lerp(26, 72, n)
+    this.plungerSpeed = lerp(34, 110, n)
     void this.audio.click(640 + 260 * n)
   }
 
@@ -739,6 +742,13 @@ export class GameApp {
       const ballExitedLane = ballZ < this.table.laneExitZ - 0.06
       const fireTimedOut = this.plungerFireMs >= this.plungerFireMaxMs
       if (reachedStroke || ballExitedLane || fireTimedOut) {
+        if (!ballExitedLane) {
+          const v = this.ballBody.linvel()
+          if (v.z > -8) {
+            const boost = lerp(1.8, 5.8, this.plungerFireCharge)
+            this.ballBody.applyImpulse({ x: 0, y: 0, z: -boost }, true)
+          }
+        }
         this.plungerMode = 'return'
         this.plungerSpeed = 24
       } else {
@@ -753,11 +763,13 @@ export class GameApp {
         this.plungerMode = 'idle'
         this.plungerSpeed = 0
         this.plungerFireMs = 0
+        this.plungerFireCharge = 0
       }
     } else {
       this.plungerMode = 'idle'
       this.plungerSpeed = 0
       this.plungerFireMs = 0
+      this.plungerFireCharge = 0
       this.plungerZ = plunger.zRest
     }
 
